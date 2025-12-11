@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Asset Tracker Dashboard</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+    <style>
+        /* --- General Reset & Typography --- */
+        :root {
+            --primary: #2c3e50;
+            --accent: #3498db;
+            --success: #27ae60;
+            --light-bg: #ecf0f1;
+            --card-bg: #ffffff;
+            --text-color: #333;
+        }
+
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: var(--light-bg); color: var(--text-color); }
+        
+        /* --- Header --- */
+        header { background: var(--primary); color: white; padding: 1rem 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .nav-container { display: flex; justify-content: space-between; align-items: center; max-width: 1200px; margin: 0 auto; }
+        h1 { margin: 0; font-size: 1.5rem; display: flex; align-items: center; gap: 10px; }
+        .status-badge { background: var(--success); font-size: 0.8rem; padding: 5px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* --- Main Container --- */
+        main { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; display: grid; grid-template-columns: 1fr; gap: 2rem; }
+        
+        @media (min-width: 768px) {
+            main { grid-template-columns: 2fr 1fr; } /* Map takes 2/3, Info takes 1/3 */
+        }
+
+        /* --- Cards --- */
+        .card { background: var(--card-bg); border-radius: 12px; box-shadow: 0 2px 15px rgba(0,0,0,0.05); padding: 1.5rem; overflow: hidden; }
+        .card h2 { color: var(--primary); margin-top: 0; border-bottom: 2px solid var(--light-bg); padding-bottom: 10px; font-size: 1.2rem; }
+
+        /* --- Map Styling --- */
+        #map { height: 500px; width: 100%; border-radius: 8px; z-index: 1; }
+        .map-controls { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; }
+        
+        button { border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
+        .btn-refresh { background: var(--primary); color: white; }
+        .btn-refresh:hover { background: #34495e; transform: translateY(-1px); }
+        .btn-locate { background: var(--accent); color: white; }
+        .btn-locate:hover { background: #2980b9; transform: translateY(-1px); }
+
+        /* --- Hardware Specs List --- */
+        .specs-list { list-style: none; padding: 0; }
+        .specs-list li { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .specs-list li:last-child { border-bottom: none; }
+        .specs-list strong { display: block; color: var(--primary); font-size: 1.1rem; margin-bottom: 4px; }
+        .tech-icon { font-size: 1.2rem; margin-right: 5px; }
+
+        /* --- Footer --- */
+        footer { text-align: center; padding: 2rem; color: #7f8c8d; font-size: 0.9rem; margin-top: 2rem; border-top: 1px solid #ddd; }
+        
+        #status-text { margin-top: 10px; font-size: 0.9rem; color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="nav-container">
+            <h1>📡 Trail <span style="font-weight:lighter; opacity:0.8;">| Lost Item Tracker</span></h1>
+            <span class="status-badge">System Online</span>
+        </div>
+    </header>
+
+    <main>
+        <section class="card">
+            <h2>📍 Live Tracking View</h2>
+            <div id="map"></div>
+            
+            <div class="map-controls">
+                <button class="btn-refresh" onclick="updateItemLocation()">
+                    <span>🔄</span> Refresh Tracker
+                </button>
+                <button class="btn-locate" onclick="findMyPosition()">
+                    <span>🎯</span> Find My Position
+                </button>
+            </div>
+            <p id="status-text">System initialized at default coordinates.</p>
+        </section>
+
+        <aside class="card">
+            <h2>🛠️ Hardware Architecture</h2>
+            <p style="font-size: 0.9rem; color: #666; margin-bottom: 20px;">
+                This tracker utilizes a low-power IoT stack designed for real-time remote asset monitoring.
+            </p>
+            
+            <ul class="specs-list">
+                <li>
+                    <strong>💾 ESP32 Microcontroller</strong>
+                    <span style="font-size: 0.9rem;">The "Brain" of the operation. A dual-core generic Wi-Fi+BT+BLE MCU module that processes sensor data and manages power states.</span>
+                </li>
+                <li>
+                    <strong>🛰️ Neo-6M GPS Module</strong>
+                    <span style="font-size: 0.9rem;">The "Eyes". Receives NMEA sentences from satellites to calculate precise Latitude (17.51°) and Longitude (78.39°).</span>
+                </li>
+                <li>
+                    <strong>📶 GSM Module (SIM800L)</strong>
+                    <span style="font-size: 0.9rem;">The "Voice". Uses 2G/GPRS cellular networks to transmit coordinates to the cloud server where Wi-Fi is unavailable.</span>
+                </li>
+            </ul>
+        </aside>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 IoT Lost Item Tracker Project | Powered by OpenStreetMap & LeafletJS</p>
+    </footer>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+        let map, itemMarker, userCircle;
+
+        // ---------------------------------------------------------------
+        // 📍 DEFAULT COORDINATES (Converted from your request)
+        // ---------------------------------------------------------------
+        const defaultLat = 17.515972; 
+        const defaultLng = 78.397916; 
+        // ---------------------------------------------------------------
+
+        function initMap() {
+            // Initialize map with a slightly closer zoom for detail
+            map = L.map('map').setView([defaultLat, defaultLng], 15);
+
+            // High contrast map tiles (OpenStreetMap)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            // Custom Icon for the Tracker (Optional: You can replace 'red' with an image URL)
+            var trackerIcon = new L.Icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            });
+
+            // Add the main tracker marker
+            itemMarker = L.marker([defaultLat, defaultLng], {icon: trackerIcon}).addTo(map)
+                .bindPopup(`
+                    <div style="text-align:center">
+                        <b>🛰️ Active Tracker</b><br>
+                        Signal Strength: Good<br>
+                        Lat: ${defaultLat.toFixed(4)}<br>
+                        Lng: ${defaultLng.toFixed(4)}
+                    </div>
+                `)
+                .openPopup();
+        }
+
+        // --- Find User Position ---
+        function findMyPosition() {
+            const status = document.getElementById('status-text');
+            status.textContent = "Requesting GPS access from browser...";
+            status.style.color = "#d35400"; // Orange color for loading
+            
+            map.locate({setView: true, maxZoom: 16});
+        }
+
+        function onLocationFound(e) {
+            const radius = e.accuracy / 2;
+
+            if (userCircle) {
+                map.removeLayer(userCircle);
+            }
+
+            // Draw blue circle for user
+            userCircle = L.circle(e.latlng, {
+                color: '#3498db',
+                fillColor: '#3498db',
+                fillOpacity: 0.2,
+                radius: radius
+            }).addTo(map).bindPopup("<b>📍 You are here</b>").openPopup();
+
+            const status = document.getElementById('status-text');
+            status.innerHTML = `✅ User located at <b>${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}</b> (Accuracy: ${Math.round(e.accuracy)}m)`;
+            status.style.color = "#27ae60"; // Green for success
+        }
+
+        function onLocationError(e) {
+            alert("Error finding location: " + e.message);
+            document.getElementById('status-text').textContent = "❌ Location access denied or failed.";
+            document.getElementById('status-text').style.color = "#c0392b";
+        }
+
+        // --- Simulation: Refresh Tracker ---
+        function updateItemLocation() {
+            const currentPos = itemMarker.getLatLng();
+            // Simulate small movement drift
+            const newLat = currentPos.lat + (Math.random() - 0.5) * 0.002; 
+            const newLng = currentPos.lng + (Math.random() - 0.5) * 0.002;
+            
+            itemMarker.setLatLng([newLat, newLng]);
+            map.setView([newLat, newLng]);
+            
+            itemMarker.setPopupContent(`
+                <div style="text-align:center">
+                    <b>🛰️ Active Tracker</b><br>
+                    <span style="color:green">Updated just now</span><br>
+                    Lat: ${newLat.toFixed(5)}<br>
+                    Lng: ${newLng.toFixed(5)}
+                </div>
+            `).openPopup();
+
+            const status = document.getElementById('status-text');
+            status.textContent = `🔄 Tracker data refreshed from server.`;
+            status.style.color = "#2c3e50";
+        }
+
+        // Initialize
+        window.onload = function() {
+            initMap();
+            map.on('locationfound', onLocationFound);
+            map.on('locationerror', onLocationError);
+        };
+    </script>
+</body>
+</html>
